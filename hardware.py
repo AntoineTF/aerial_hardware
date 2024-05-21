@@ -4,11 +4,13 @@ from threading import Timer
 import numpy as np
 import heapq 
 import keyboard
+import matplotlib.pyplot as plt
 
 import cflib.crtp  # noqa
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.utils import uri_helper
+import cv2
 
 # Variables to store state estimates
 state_estimate = {
@@ -42,21 +44,22 @@ SCAN_RATE = 0.7*100
 SCAN_WINDOW = 20 #degrees
 final_landing = False
 previous_alt = None
+t = 0
 
 mean_alt = []
 cross_path = []
 path_todo = []
 
 x_irl = 0.25
-y_irl = 0.25
+y_irl = 1.5
 
 uri = uri_helper.uri_from_env(default='radio://0/20/2M/E7E7E7E702')
 
 # Occupanxy map based on distance sensor
 min_x, max_x = 0, 5.0 # meter
 min_y, max_y = 0, 3.0 # meter
-range_max = 2.0 # meter, maximum range of distance sensor
-res_pos = 0.15 # meter
+range_max = 2 # meter, maximum range of distance sensor
+res_pos = 0.25 # meter
 conf = 0.2 # certainty given by each measurement
 t = 0 # only for plotting
 
@@ -70,10 +73,12 @@ map_grid[:,-1] = -1
 obstructed_cells = set()
 
 def occupancy_map(sensor_data):
-    global map_grid,state_estimate
+    print("sensor_data",sensor_data)
+    global map_grid,state_estimate,t
     pos_x = state_estimate['x']
     pos_y = state_estimate['y']
     yaw = state_estimate['yaw']
+    print("state_estimate",state_estimate)
     
     for j in range(4): # 4 sensors
         yaw_sensor = yaw + j*np.pi/2 #yaw positive is counter clockwise
@@ -97,7 +102,7 @@ def occupancy_map(sensor_data):
 
             # update the map
             if dist < measurement:
-                #map_grid[idx_x, idx_y] += conf <- The A* algorithm is not working with this line of code 
+                map_grid[idx_x, idx_y] += conf #<- The A* algorithm is not working with this line of code 
                 pass
             else:
                 map_grid[idx_x, idx_y] -= conf
@@ -108,14 +113,15 @@ def occupancy_map(sensor_data):
                 break
     
     map_grid = np.clip(map_grid, -1, 1) # certainty can never be more than 100%
-
-    # only plot every Nth time step (comment out if not needed)
-    #if t % 50 == 0:
-        #flipped_map = np.flip(map_grid, 1)  # This flips the map horizontally.
-        #plt.imshow(flipped_map, vmin=-1, vmax=1, cmap='gray', origin='lower') # flip the map to match the coordinate system
-        #plt.savefig("map.png")
-        #plt.close()
-    #t +=1
+    #print("map_grid",map_grid)  
+    #only plot every Nth time step (comment out if not needed)
+    if t % 100 == 0:
+        flipped_map = np.flip(map_grid, 1)  # This flips the map horizontally.
+        plt.imshow(flipped_map, vmin=-1, vmax=1, cmap='gray', origin='lower') # flip the map to match the coordinate system
+        plt.savefig("map.png")
+        print("Image has been saved.")
+        plt.close()
+    t +=1
     return map_grid
 
 # Only output errors from the logging framework
@@ -197,10 +203,10 @@ class LoggingExample:
         state_estimate['z'] = data['stateEstimate.z']
         state_estimate['yaw'] = np.deg2rad(data['stabilizer.yaw'])
         
-        sensor_data['range_front'] = data['range.front']
-        sensor_data['range_back'] = data['range.back']
-        sensor_data['range_left'] = data['range.left']
-        sensor_data['range_right'] = data['range.right']
+        sensor_data['range_front'] = data['range.front']/1000
+        sensor_data['range_back'] = data['range.back']/1000
+        sensor_data['range_left'] = data['range.left']/1000
+        sensor_data['range_right'] = data['range.right']/1000
         
         """Callback from a the log API when data arrives"""
         #print(f'[{timestamp}][{logconf.name}]: ', end='')
@@ -234,7 +240,7 @@ def get_corner():
 def get_next_checkpoint(obj,a_star_mode = "euclidean"):
     global state_estimate, sensor_data
     current_pos = np.array([state_estimate['x'],state_estimate['y']])
-    print("Current position in simulation",current_pos)
+    #print("Current position in simulation",current_pos)
     if obj.ndim == 1:
         obj = obj.reshape(1,-1)
     grid_coords = convert_to_grid_index(current_pos) 
@@ -243,8 +249,8 @@ def get_next_checkpoint(obj,a_star_mode = "euclidean"):
     best_find_path, d_small = [], np.inf
     map = occupancy_map(sensor_data)
     #if first_a_star or ((sensor_data["range_front"] < 90 or sensor_data["range_left"] < 90 or sensor_data["range_right"] < 90 or sensor_data["range_back"] < 90) and (sensor_data["range_front"]-sensor_data["range_right"] > 90 or sensor_data["range_front"]-sensor_data["range_left"] > 90)):
-    if first_a_star or ((sensor_data["range_front"] < 300 or sensor_data["range_left"] < 300 or sensor_data["range_right"] < 300 or sensor_data["range_back"] < 300)):
-        #print("#####################################################REDOING ASTAR#############################################")
+    if first_a_star or ((sensor_data["range_front"] < 250 or sensor_data["range_left"] < 250 or sensor_data["range_right"] < 250 or sensor_data["range_back"] < 250)):
+        print("#####################################################REDOING ASTAR#############################################")
         for point in grid: #Condition pour pas le run constamment, condition pour que meme quand il est pas sure il run 
             int_point = tuple(int(x) for x in point)
             if a_star_mode == "euclidean":
@@ -252,7 +258,7 @@ def get_next_checkpoint(obj,a_star_mode = "euclidean"):
             else:
                 path, dist = a_star(map, tuple(grid_coords),int_point, mode='manhattan')
             if dist is not None and dist < d_small:
-                print("int_point",int_point)
+                #print("int_point",int_point)
                 best_find_path, d_small = np.array(path), dist
                 
     if len(best_find_path) > 0:      
@@ -265,7 +271,7 @@ def get_next_checkpoint(obj,a_star_mode = "euclidean"):
         next_checkpoint_idx = next_waypoint_interval if next_waypoint_interval < len(best_find_path) -1 else -1
         if euclidial_distance(best_find_path[next_checkpoint_idx],current_pos) < waypoint_tolerance:
             next_waypoint_idx = next_waypoint_idx + 1 if next_waypoint_idx + 1 < len(best_find_path) - 1 else -1
-        print("best_find_path[next_checkpoint_idx]",best_find_path[next_checkpoint_idx])
+        #print("best_find_path[next_checkpoint_idx]",best_find_path[next_checkpoint_idx])
         return best_find_path[next_checkpoint_idx]
     else:
         return obj
@@ -319,7 +325,6 @@ def goto_destination_with_scan(destination, sensor_data, state = "follow", a_sta
     is_scanning, control_commands = scan(sensor_data)
 
     if is_scanning:
-        print("###########################Scanning...############################")
         return control_commands
     else:
         if a_star_mode == "euclidean":
@@ -332,11 +337,11 @@ def goto_destination_with_scan(destination, sensor_data, state = "follow", a_sta
         relative_position = relative_position.ravel()
         #relative_angle = np.rad2deg(clip_angle(np.arctan2(relative_position[1], relative_position[0]) - state_estimate['yaw']))
         relative_angle = np.rad2deg(clip_angle(np.arctan2(relative_position[1], relative_position[0]) - state_estimate['yaw']))
-        print("relative_angle",relative_angle)
+        #print("relative_angle",relative_angle)
         abs_relative_angle = np.abs(relative_angle)  
         if state == "follow":    
             if abs_relative_angle < 10:
-                print("front")
+                #print("front")
                 control_command = [0.35, 0.0, 0.0, height_desired]
             elif abs_relative_angle > 55 and abs_relative_angle < 100:
                 print("cote")
@@ -367,7 +372,7 @@ def scan(sensor_data):
     if last_scan_pos is None:
         last_scan_pos = [startpose[0], startpose[1]]	
     actual_position = np.array([state_estimate['x'], state_estimate['y']])
-    print("last_scan_pos",last_scan_pos,"actual_position",actual_position,"euclidial_distance",euclidial_distance(actual_position, last_scan_pos))
+    #print("last_scan_pos",last_scan_pos,"actual_position",actual_position,"euclidial_distance",euclidial_distance(actual_position, last_scan_pos))
     if euclidial_distance(actual_position, last_scan_pos) >= SCAN_THRESHOLD:
         SCAN = True
         last_scan_pos = actual_position
@@ -486,13 +491,12 @@ if __name__ == '__main__':
             print("BEGINNING- STARTPOSE",startpose, "last_scan_pos",last_scan_pos)
             get_next_checkpoint(zone_of_interest)
             first_a_star = False
-        
         time.sleep(0.01)
         for y in range(10):
             cf.commander.send_hover_setpoint(0, 0, 0, y / 18) #(vx,vy,yaw, range_down)
             time.sleep(0.1)
         for _ in range(20):
-            cf.commander.send_hover_setpoint(0, 0, 0, 0.2)
+            cf.commander.send_hover_setpoint(0, 0, 0, 0.3)
             time.sleep(0.1)
         
        # Go to Landing Region
@@ -503,32 +507,31 @@ if __name__ == '__main__':
                 cf.commander.send_hover_setpoint(control_command[0], control_command[1], control_command[2], control_command[3])
                 time.sleep(0.1)
             if last_delta_alt is None:
-                last_delta_alt = state_estimate['z']#range down or z ?
+                last_delta_alt = state_estimate['z']
             else:   
                 mean_alt.append(state_estimate['z']-last_delta_alt)
                 last_delta_alt = state_estimate['z']
                         
-            if previous_alt is None:
-                previous_alt = state_estimate['z']
-                last_delta_alt = 0
-            else:
-                last_delta_alt = abs(state_estimate['z'] - previous_alt)
-                previous_alt = state_estimate['z']
-                print("last_delta_alt",last_delta_alt)
-            #if abs(last_delta_alt) >= 0.07 and sensor_data["x_global"] <= 5-1.5:
-            if abs(last_delta_alt) >= 20:
-                print("LANDING!!!!!!!!")
-                go_back = False  
-                final_landing = True
-                for y in range(30):
-                    cf.commander.send_hover_setpoint(0, 0, 0, (10 - y/3) / 25)
-                    time.sleep(0.1)
-                break
+            # if previous_alt is None:
+            #     previous_alt = state_estimate['z']
+            #     last_delta_alt = 0
+            # else:
+            #     last_delta_alt = abs(state_estimate['z'] - previous_alt)
+            #     previous_alt = state_estimate['z']
+            #     print("last_delta_alt",last_delta_alt)
+            # #if abs(last_delta_alt) >= 0.07 and sensor_data["x_global"] <= 5-1.5:
+            # if abs(last_delta_alt) >= 0.10:
+            #     print("LANDING!!!!!!!!")
+            #     go_back = False  
+            #     final_landing = True
+            #     for y in range(30):
+            #         cf.commander.send_hover_setpoint(0, 0, 0, (10 - y/3) / 25)
+            #         time.sleep(0.1)
+            #     break
+        PREVIOUS_COMMAND = control_command
         for y in range(30):
             cf.commander.send_hover_setpoint(0, 0, 0, (10 - y/3) / 25)
-        time.sleep(0.1)
-            
-        PREVIOUS_COMMAND = control_command
+            time.sleep(0.1)
         cf.commander.send_stop_setpoint()
         break
     
