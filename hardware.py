@@ -27,7 +27,8 @@ sensor_data = {
     'range_right': 0.0
 }
 # BOOLEAN VARIABLES + ARRAYS + DICTIONARIES + CONSTANTS
-startpose = None
+startpose = None#
+threshold_local = 0.15
 SCAN = False
 plot_map = True
 first_a_star = True
@@ -45,12 +46,17 @@ SCAN_WINDOW = 20 #degrees
 final_landing = False
 previous_alt = None
 t = 0
-
+go_back = False
+path_idx = 0
+actual_path = []
 mean_alt = []
 cross_path = []
 path_todo = []
+last_alt = None
+found_landpad = False
 
-x_irl = 0.25
+
+x_irl = 3.27
 y_irl = 1.5
 
 uri = uri_helper.uri_from_env(default='radio://0/20/2M/E7E7E7E702')
@@ -59,8 +65,8 @@ uri = uri_helper.uri_from_env(default='radio://0/20/2M/E7E7E7E702')
 min_x, max_x = 0, 5.0 # meter
 min_y, max_y = 0, 3.0 # meter
 range_max = 2 # meter, maximum range of distance sensor
-res_pos = 0.25 # meter
-conf = 0.2 # certainty given by each measurement
+res_pos = 0.2 # meter
+conf = 0.1 # certainty given by each measurement
 t = 0 # only for plotting
 
 map_grid = np.zeros((int((max_x-min_x)/res_pos), int((max_y-min_y)/res_pos))) # 0 = unknown, 1 = free, -1 = occupied
@@ -102,26 +108,29 @@ def occupancy_map(sensor_data):
 
             # update the map
             if dist < measurement:
-                map_grid[idx_x, idx_y] += conf #<- The A* algorithm is not working with this line of code 
+                #map_grid[idx_x, idx_y] += conf #<- The A* algorithm is not working with this line of code 
                 pass
             else:
+                print("exp")
                 map_grid[idx_x, idx_y] -= conf
                 for x in range(-1,2):
-                    for y in range(-1,2):
-                        if (idx_x+x, idx_y+y) not in obstructed_cells:
-                            obstructed_cells.add((idx_x+x, idx_y+y))
+                   for y in range(-1,2):
+                       if (idx_x+x, idx_y+y) not in obstructed_cells:
+                           obstructed_cells.add((idx_x+x, idx_y+y))
                 break
     
     map_grid = np.clip(map_grid, -1, 1) # certainty can never be more than 100%
     #print("map_grid",map_grid)  
     #only plot every Nth time step (comment out if not needed)
-    if t % 100 == 0:
+
+    if t % 1 == 0:
         flipped_map = np.flip(map_grid, 1)  # This flips the map horizontally.
         plt.imshow(flipped_map, vmin=-1, vmax=1, cmap='gray', origin='lower') # flip the map to match the coordinate system
         plt.savefig("map.png")
         print("Image has been saved.")
         plt.close()
     t +=1
+    
     return map_grid
 
 # Only output errors from the logging framework
@@ -244,19 +253,19 @@ def get_next_checkpoint(obj,a_star_mode = "euclidean"):
     if obj.ndim == 1:
         obj = obj.reshape(1,-1)
     grid_coords = convert_to_grid_index(current_pos) 
-    print("simulation position in grid format",grid_coords)
+    #print("simulation position in grid format",grid_coords)
     grid = np.unique(convert_to_grid_index(obj), axis=0) 
     best_find_path, d_small = [], np.inf
-    map = occupancy_map(sensor_data)
+    occupancy_map(sensor_data)
     #if first_a_star or ((sensor_data["range_front"] < 90 or sensor_data["range_left"] < 90 or sensor_data["range_right"] < 90 or sensor_data["range_back"] < 90) and (sensor_data["range_front"]-sensor_data["range_right"] > 90 or sensor_data["range_front"]-sensor_data["range_left"] > 90)):
     if first_a_star or ((sensor_data["range_front"] < 250 or sensor_data["range_left"] < 250 or sensor_data["range_right"] < 250 or sensor_data["range_back"] < 250)):
-        print("#####################################################REDOING ASTAR#############################################")
+        #print("#####################################################REDOING ASTAR#############################################")
         for point in grid: #Condition pour pas le run constamment, condition pour que meme quand il est pas sure il run 
             int_point = tuple(int(x) for x in point)
             if a_star_mode == "euclidean":
-                path, dist = a_star(map, tuple(grid_coords),int_point, mode='euclidean')
+                path, dist = a_star(map_grid, tuple(grid_coords),int_point, mode='euclidean')
             else:
-                path, dist = a_star(map, tuple(grid_coords),int_point, mode='manhattan')
+                path, dist = a_star(map_grid, tuple(grid_coords),int_point, mode='manhattan')
             if dist is not None and dist < d_small:
                 #print("int_point",int_point)
                 best_find_path, d_small = np.array(path), dist
@@ -270,7 +279,8 @@ def get_next_checkpoint(obj,a_star_mode = "euclidean"):
         d_small = d_small*res_pos
         next_checkpoint_idx = next_waypoint_interval if next_waypoint_interval < len(best_find_path) -1 else -1
         if euclidial_distance(best_find_path[next_checkpoint_idx],current_pos) < waypoint_tolerance:
-            next_waypoint_idx = next_waypoint_idx + 1 if next_waypoint_idx + 1 < len(best_find_path) - 1 else -1
+            next_checkpoint_idx = next_checkpoint_idx + 1 if next_checkpoint_idx + 1 < len(best_find_path) - 1 else -1
+            
         #print("best_find_path[next_checkpoint_idx]",best_find_path[next_checkpoint_idx])
         return best_find_path[next_checkpoint_idx]
     else:
@@ -284,6 +294,9 @@ def convert_to_grid_index(location):
     return np.array(np.round(location / res_pos), dtype=int)
 
 def a_star(mapGrid, startNode, endNode, mode='euclidean'):
+    
+    
+
     if mode == 'manhattan':
         heuristicFunction = manhattan_dist
         isValidNeighbor = lambda x,y: (x == 0 and y == 0) or (x != 0 and y != 0)
@@ -344,14 +357,14 @@ def goto_destination_with_scan(destination, sensor_data, state = "follow", a_sta
                 #print("front")
                 control_command = [0.35, 0.0, 0.0, height_desired]
             elif abs_relative_angle > 55 and abs_relative_angle < 100:
-                print("cote")
+                #print("cote")
                 control_command = [0.0, 0.5*np.sign(relative_angle) , 0.0, height_desired]
             elif abs_relative_angle > 170:
-                print("back")
+                #print("back")
                 control_command = [-0.35, 0.0, 0.0, height_desired]
             else:
-                print("turning en legende")
-                control_command = [0.0, 0.0, -0.85*100*np.sign(relative_angle),height_desired]
+                #print("turning en legende")
+                control_command = [0.0, 0.0, -0.70*100*np.sign(relative_angle),height_desired]
         elif state == "search":
             if abs_relative_angle < 10:
                 control_command = [0.35, 0.0, 0.0,height_desired]
@@ -404,8 +417,115 @@ def scan(sensor_data):
             control_command = [0.0, 0.0, 0.0,height_desired]
             
         return SCAN, control_command
+    
+research_grid = np.unique(np.mgrid[int((5 - 1.5)/res_pos)+2:map_grid.shape[0]-1, 1:map_grid.shape[1]-1].reshape(2,-1).T, axis = 0)
+    
+def research(sensor_data):
+    global research_grid, obstructed_cells, found_landpad, actual_path, path_idx, actual_position, last_alt
+#The obj of this function is to define a path to the landing pad, we basically need to explore all the landing region
+    actual_position = convert_to_grid_index(np.array([state_estimate["x"], state_estimate["y"]]))
+#If the landing pad is not where we are right know, we can remove this point from the list of research points
+    right_neighbor = [actual_position[0] + 1, actual_position[1]]
+    to_remove = np.where(
+        (research_grid == actual_position).all(axis=1) |
+        (research_grid == right_neighbor).all(axis=1) 
+    )[0]
+    research_grid = np.delete(research_grid, to_remove, axis=0)
+
+    path = None
+# While we are searching for the pad and we are still discovering obstacles, we need to update the map consequently
+    if len(obstructed_cells) > 0:   
+# Loading and treating new points - updating the research points
+        # Calculate the threshold x-coordinate
+        x_threshold = int((5 - 1.5) / res_pos)
+        # Filter out obstructed_cells that should be removed based on the x-coordinate
+        to_remove = {cell for cell in obstructed_cells if cell[0] >= x_threshold}
+        # Remove these points from research_grid
+        exploring_tuples = list(map(tuple, research_grid))
+        # Create a set of tuples from exploring_points_to_remove for fast lookup
+        remove_set = set(map(tuple, to_remove))
+        # Filter exploring_points using list comprehension and set membership
+        research_grid = np.array([point for point in exploring_tuples if point not in remove_set])
+        # Reset new_occupied_cells
+        obstructed_cells = set()
+
+# Preprocessing the point where the landing pad cannot be 
+        for point in research_grid:
+            if not path_exists(actual_position, point):
+                point_array = np.array(point)
+                mask = ~(research_grid == point_array).all(axis=1)
+                research_grid = research_grid[mask]
+# Now that every point in the grid is accessible, we can start the exploration by defining the path
+        probable_point = research_grid[(research_grid[:,0] > int((5 - 1.5)/res_pos) + 2) & (research_grid[:,0] < map_grid.shape[0]-2) & (research_grid[:,1] > 1) & (research_grid[:,1] < map_grid.shape[1]-2)]
+        path = np.array(build_route_from_positions(treat_prob_point(probable_point,research_grid),actual_position))
+        print("path research",path)
+
+        
+    if path is None:
+        print("Path is None")
+        if path_idx == len(actual_path) - 1:
+            path_idx = 0
+        elif euclidean_dist(actual_position*res_pos, actual_path[path_idx]*res_pos) < 0.1:
+            path_idx += 1
+    else :
+        actual_path = path
+        path_idx = 0
+                    
+    control_com = goto_destination_with_scan(actual_path[path_idx]*res_pos,sensor_data,a_star_mode="search")
+    
+# Stopping condition if we find the landing pad
+    # if last_alt is None:
+    #     last_alt = state_estimate['z']
+    # else:
+    #     delta_alt = state_estimate['z'] - last_alt
+    #     last_alt = state_estimate['z']
+    #     if abs(delta_alt) >= 10: 
+    #         found_landpad = True
+    #         control_com = [0,0,height_desired,0]   
+    found_landpad = False
+        
+    return control_com, found_landpad
 
 ###############################################################################TOOLS
+def path_exists(actual_position, point):
+    #Check precisely why manhattan here and not euclidean
+    path, _ = a_star(map_grid, tuple(actual_position),tuple(point), mode='euclidean')
+    return path is not None
+
+def streamline_route(points):
+    # Begin with the initial point in the route
+    streamlined_route = [points[0]]
+
+    # Iterate over each point, excluding the first and last
+    for index in range(1, len(points) - 1):
+        # Determine if a point can be skipped based on collinearity
+        if not check_collinearity(points[index - 1], points[index], points[index + 1]):
+            streamlined_route.append(points[index])  # Include this point if it's crucial for path shape
+
+    # Always include the final point to complete the route
+    streamlined_route.append(points[-1])
+
+    return streamlined_route
+
+def build_route_from_positions(positions, current_position):
+    route = []
+    positions = np.append(positions, np.array([current_position]), axis=0)
+    nearest_position = np.argmin(np.linalg.norm(positions - current_position, axis=1))
+    route_sequence = [nearest_position]
+
+    # Continuously search for the closest next position
+    while len(route_sequence) < len(positions):
+        recent_position = route_sequence[-1]
+        position_distances = np.linalg.norm(positions[recent_position] - positions, axis=1)
+        position_distances[route_sequence] = np.inf  # Ignore already included positions
+        next_closest = np.argmin(position_distances)
+        route_sequence.append(next_closest)
+
+    route_sequence.remove(nearest_position)  # Remove the initial added current position
+
+    route = [positions[index] for index in route_sequence]
+    return route
+
 def clip_angle(angle):
     angle = angle%(2*np.pi)
     if angle > np.pi:
@@ -484,11 +604,12 @@ if __name__ == '__main__':
     # so this is where your application should do something. In our case we
     # are just waiting until we are disconnected.
     while le.is_connected:
-        # Taking off 
+        # Taking off
+        occupancy_map(sensor_data)
         if startpose is None:
             zone_of_interest = get_corner()
             startpose = np.array([state_estimate['x'],state_estimate['y'],state_estimate['z']])
-            print("BEGINNING- STARTPOSE",startpose, "last_scan_pos",last_scan_pos)
+            #print("BEGINNING- STARTPOSE",startpose, "last_scan_pos",last_scan_pos)
             get_next_checkpoint(zone_of_interest)
             first_a_star = False
         time.sleep(0.01)
@@ -501,10 +622,25 @@ if __name__ == '__main__':
         
        # Go to Landing Region
         while not landing_bool and state_estimate["x"] <= 5-1.5:
-            control_command = goto_destination_with_scan(zone_of_interest, sensor_data,a_star_mode="manhattan")
-            print("control_command",control_command)
             for _ in range(1):
+                if sensor_data["range_front"] < threshold_local:
+                    #print("local front", sensor_data["range_front"])
+                    control_command = [-0.1, 0, 0, 0.3]
+                elif sensor_data["range_left"] < threshold_local:
+                    #print("local left", sensor_data["range_left"])
+                    control_command = [0, -0.1, 0, 0.3]
+                elif sensor_data["range_right"] < threshold_local:
+                    #print("local right", sensor_data["range_right"])
+                    control_command = [0, 0.1, 0, 0.3]  
+                elif sensor_data["range_back"] < threshold_local:
+                    #print("local back", sensor_data["range_back"])
+                    control_command = [0.1, 0, 0, 0.3]
+                else:
+                    control_command = goto_destination_with_scan(zone_of_interest, sensor_data,a_star_mode="euclidean")
+                    #print("normal")
+                #print("control_command",control_command)    
                 cf.commander.send_hover_setpoint(control_command[0], control_command[1], control_command[2], control_command[3])
+
                 time.sleep(0.1)
             if last_delta_alt is None:
                 last_delta_alt = state_estimate['z']
@@ -512,24 +648,15 @@ if __name__ == '__main__':
                 mean_alt.append(state_estimate['z']-last_delta_alt)
                 last_delta_alt = state_estimate['z']
                         
-            # if previous_alt is None:
-            #     previous_alt = state_estimate['z']
-            #     last_delta_alt = 0
-            # else:
-            #     last_delta_alt = abs(state_estimate['z'] - previous_alt)
-            #     previous_alt = state_estimate['z']
-            #     print("last_delta_alt",last_delta_alt)
-            # #if abs(last_delta_alt) >= 0.07 and sensor_data["x_global"] <= 5-1.5:
-            # if abs(last_delta_alt) >= 0.10:
-            #     print("LANDING!!!!!!!!")
-            #     go_back = False  
-            #     final_landing = True
-            #     for y in range(30):
-            #         cf.commander.send_hover_setpoint(0, 0, 0, (10 - y/3) / 25)
-            #         time.sleep(0.1)
-            #     break
-        PREVIOUS_COMMAND = control_command
+        # Arrived at landing region and looking for the pad
+        while not landing_bool and not go_back:
+            print("SEARCHING GRID")
+            control_command, landing_bool = research(sensor_data)
+            
+            
+            
         for y in range(30):
+            print("LANDING")
             cf.commander.send_hover_setpoint(0, 0, 0, (10 - y/3) / 25)
             time.sleep(0.1)
         cf.commander.send_stop_setpoint()
