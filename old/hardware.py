@@ -56,7 +56,7 @@ last_alt = None
 found_landpad = False
 
 
-x_irl = 1.5
+x_irl = 3.27
 y_irl = 1.5
 
 uri = uri_helper.uri_from_env(default='radio://0/20/2M/E7E7E7E702')
@@ -117,10 +117,11 @@ def occupancy_map(sensor_data):
                    for y in range(-1,2):
                        if (idx_x+x, idx_y+y) not in obstructed_cells:
                            obstructed_cells.add((idx_x+x, idx_y+y))
-                           print("new obstructed cell",idx_x+x, idx_y+y)
                 break
     
     map_grid = np.clip(map_grid, -1, 1) # certainty can never be more than 100%
+    #print("map_grid",map_grid)  
+    #only plot every Nth time step (comment out if not needed)
 
     if t % 1 == 0:
         flipped_map = np.flip(map_grid, 1)  # This flips the map horizontally.
@@ -255,18 +256,16 @@ def get_next_checkpoint(obj,a_star_mode = "euclidean"):
     #print("simulation position in grid format",grid_coords)
     grid = np.unique(convert_to_grid_index(obj), axis=0) 
     best_find_path, d_small = [], np.inf
-    map_ = occupancy_map(sensor_data)
+    occupancy_map(sensor_data)
     #if first_a_star or ((sensor_data["range_front"] < 90 or sensor_data["range_left"] < 90 or sensor_data["range_right"] < 90 or sensor_data["range_back"] < 90) and (sensor_data["range_front"]-sensor_data["range_right"] > 90 or sensor_data["range_front"]-sensor_data["range_left"] > 90)):
     if first_a_star or ((sensor_data["range_front"] < 250 or sensor_data["range_left"] < 250 or sensor_data["range_right"] < 250 or sensor_data["range_back"] < 250)):
         #print("#####################################################REDOING ASTAR#############################################")
         for point in grid: #Condition pour pas le run constamment, condition pour que meme quand il est pas sure il run 
             int_point = tuple(int(x) for x in point)
             if a_star_mode == "euclidean":
-                #path, dist = a_star(map_grid, tuple(grid_coords),int_point, mode='euclidean')
-                path, dist = a_star(map_, tuple(grid_coords),int_point, mode='euclidean')
+                path, dist = a_star(map_grid, tuple(grid_coords),int_point, mode='euclidean')
             else:
-                #path, dist = a_star(map_grid, tuple(grid_coords),int_point, mode='manhattan')
-                path, dist = a_star(map_, tuple(grid_coords),int_point, mode='manhattan')
+                path, dist = a_star(map_grid, tuple(grid_coords),int_point, mode='manhattan')
             if dist is not None and dist < d_small:
                 #print("int_point",int_point)
                 best_find_path, d_small = np.array(path), dist
@@ -370,11 +369,11 @@ def goto_destination_with_scan(destination, sensor_data, state = "follow", a_sta
             if abs_relative_angle < 10:
                 control_command = [0.35, 0.0, 0.0,height_desired]
             elif abs_relative_angle > 55 and abs_relative_angle < 100:
-                control_command = [0.0, 0.5*np.sign(relative_angle) , 0.0,height_desired]
+                control_command = [0.0, 0.4*np.sign(relative_angle)*10 , 0.0,height_desired]
             elif abs_relative_angle > 170:
                 control_command = [-0.35, 0.0, 0.0, height_desired]
             else:
-                control_command = [0.0, 0.0, -0.6*np.sign(relative_angle)*100,height_desired]
+                control_command = [0.0, 0.0, -0.6*np.sign(relative_angle)*10    ,height_desired]
         else:
             pass
         
@@ -422,7 +421,7 @@ def scan(sensor_data):
 research_grid = np.unique(np.mgrid[int((5 - 1.5)/res_pos)+2:map_grid.shape[0]-1, 1:map_grid.shape[1]-1].reshape(2,-1).T, axis = 0)
     
 def research(sensor_data):
-    global research_grid, obstructed_cells, found_landpad, actual_path, path_idx, last_alt #removed actual_position
+    global research_grid, obstructed_cells, found_landpad, actual_path, path_idx, actual_position, last_alt
 #The obj of this function is to define a path to the landing pad, we basically need to explore all the landing region
     actual_position = convert_to_grid_index(np.array([state_estimate["x"], state_estimate["y"]]))
 #If the landing pad is not where we are right know, we can remove this point from the list of research points
@@ -432,10 +431,9 @@ def research(sensor_data):
         (research_grid == right_neighbor).all(axis=1) 
     )[0]
     research_grid = np.delete(research_grid, to_remove, axis=0)
-    print("research_grid",research_grid)
+
     path = None
 # While we are searching for the pad and we are still discovering obstacles, we need to update the map consequently
-    print("obstructed_cells",obstructed_cells)
     if len(obstructed_cells) > 0:   
 # Loading and treating new points - updating the research points
         # Calculate the threshold x-coordinate
@@ -460,20 +458,20 @@ def research(sensor_data):
 # Now that every point in the grid is accessible, we can start the exploration by defining the path
         probable_point = research_grid[(research_grid[:,0] > int((5 - 1.5)/res_pos) + 2) & (research_grid[:,0] < map_grid.shape[0]-2) & (research_grid[:,1] > 1) & (research_grid[:,1] < map_grid.shape[1]-2)]
         path = np.array(build_route_from_positions(treat_prob_point(probable_point,research_grid),actual_position))
-        print("path",path)
-        plot_exploring(path)
+        print("path research",path)
 
         
     if path is None:
-        print("Pathhh is None")
+        print("Path is None")
         if path_idx == len(actual_path) - 1:
             path_idx = 0
         elif euclidean_dist(actual_position*res_pos, actual_path[path_idx]*res_pos) < 0.1:
             path_idx += 1
     else :
         actual_path = path
-        path_idx = 0     
-    control_com = goto_destination_with_scan(actual_path[path_idx]*res_pos,sensor_data,state="search",a_star_mode="euclidean")
+        path_idx = 0
+                    
+    control_com = goto_destination_with_scan(actual_path[path_idx]*res_pos,sensor_data,a_star_mode="search")
     
 # Stopping condition if we find the landing pad
     # if last_alt is None:
@@ -487,59 +485,8 @@ def research(sensor_data):
     found_landpad = False
         
     return control_com, found_landpad
-# visitedMap = np.zeros(_map_grid.shape)
-# goalAcc = True
-# path_ = None
-# def research(sensor_data):
-#     global research_grid_, obstructed_cells, found_landpad, actual_path_, path_idx, actual_position, last_alt
-#     global visitedMap, goalAcc, path_
-# #The obj of this function is to define a path_ to the landing pad, we basically need to explore all the landing region
-#     actual_position = convert_to_grid_index(np.array([state_estimate["x"], state_estimate["y"]]))
-
-#     visitedMap[actual_position[0], actual_position[1]] = 1
-
-# #If the landing pad is not where we are right know, we can remove this point_ from the list of research points
-#     if path_ is not None:
-#         if np.linalg.norm(actual_position - np.array(path_[-1])) < 0.1:
-#             goalAcc = True
-
-#     while 1 and goalAcc:
-#         indexPtX = np.random.randint(round(3.5/res_pos), _map_grid.shape[0])
-#         indexPtY = np.random.randint(0, _map_grid.shape[1])
-#         if _map_grid[indexPtX, indexPtY] <0 and visitedMap[indexPtX, indexPtY] == 0:
-#             print("found a path_")
-#             path_ = a_star(_map_grid, actual_position, (indexPtX, indexPtY), mode='manhattan')
-#             break
-        
-#     if path_ is None:
-#         print("Path_ is None")
-#         if path_idx == len(actual_path_) - 1:
-#             path_idx = 0
-#         elif euclidean_dist(actual_position*res_pos, actual_path_[path_idx]*res_pos) < 0.1:
-#             path_idx += 1
-#     else :
-#         actual_path_ = path_
-#         path_idx = 0
-                    
-#     control_com = goto_destination_with_scan(actual_path_[path_idx]*res_pos,sensor_data,a_star_mode="search")
-    
-  
-#     found_landpad = False
-        
-#     return control_com, found_landpad
-
 
 ###############################################################################TOOLS
-def plot_exploring(path):
-    global t
-    if plot_map:
-        if t % 30 == 0:
-            plt.clf()
-            plt.imshow(np.flip(map_grid,1), vmin=-1, vmax=1, cmap='gray', origin='lower') # flip the map to match the coordinate system
-            plt.plot(map_grid.shape[1]-path[:,1]-1, path[:,0], 'ro')
-            plt.savefig("exploring_path.png")
-        t +=1
-
 def path_exists(actual_position, point):
     #Check precisely why manhattan here and not euclidean
     path, _ = a_star(map_grid, tuple(actual_position),tuple(point), mode='euclidean')
@@ -705,10 +652,7 @@ if __name__ == '__main__':
         while not landing_bool and not go_back:
             print("SEARCHING GRID")
             control_command, landing_bool = research(sensor_data)
-            for i in range(1):
-                cf.commander.send_hover_setpoint(control_command[0], control_command[1], control_command[2], control_command[3])
-                time.sleep(0.1)
-            print("TESTING")
+            
             
             
         for y in range(30):
