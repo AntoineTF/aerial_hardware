@@ -66,13 +66,20 @@ If you want to observe the generated occupancy grid, set `map_recording=True` in
 
 ## Mission Demonstrations
 
-<p align="center">
-  <b>Map generation walkthrough</b><br>
-  <img src="media/map_generation.gif" alt="Map generation walkthrough" width="320"/><br><br>
-
-  <b>Landing-pad acquisition</b><br>
-  <img src="media/landing_pad_search.gif" alt="Landing-pad acquisition" width="320"/>
-</p>
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <b>Map generation walkthrough</b><br>
+        <img src="media/map_generation.gif" alt="Map generation walkthrough" width="320"/>
+      </td>
+      <td align="center">
+        <b>Landing-pad acquisition</b><br>
+        <img src="media/landing_pad_search.gif" alt="Landing-pad acquisition" width="320"/>
+      </td>
+    </tr>
+  </table>
+</div>
 
 
 ## Extending the Project
