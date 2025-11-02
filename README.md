@@ -9,6 +9,23 @@ The objective is to autonomously steer a Crazyflie nano‑drone from its take-of
 - **Local obstacle avoidance** – combines reactive avoidance with path replanning and periodic yaw scans to refine the map.
 - **Search strategy** – greedy coverage pattern over the exploration half of the arena to discover the landing pad.
 
+## Mission Demonstrations
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <b>Map generation walkthrough</b><br>
+        <img src="media/map_generation.gif" alt="Map generation walkthrough" width="320"/>
+      </td>
+      <td align="center">
+        <b>Landing-pad acquisition</b><br>
+        <img src="media/landing_pad_search.gif" alt="Landing-pad acquisition" width="320"/>
+      </td>
+    </tr>
+  </table>
+</div>
+
 ## Repository Layout
 
 ```
@@ -63,24 +80,6 @@ If you want to observe the generated occupancy grid, set `map_recording=True` in
 
 - Mission footage lives in `media/`.
 - `media/final_run_vid.mp4` – A short clip of the real run covering map generation, landing-pad detection, and the return flight.
-
-## Mission Demonstrations
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <b>Map generation walkthrough</b><br>
-        <img src="media/map_generation.gif" alt="Map generation walkthrough" width="320"/>
-      </td>
-      <td align="center">
-        <b>Landing-pad acquisition</b><br>
-        <img src="media/landing_pad_search.gif" alt="Landing-pad acquisition" width="320"/>
-      </td>
-    </tr>
-  </table>
-</div>
-
 
 ## Extending the Project
 
