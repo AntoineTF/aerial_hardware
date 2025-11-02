@@ -64,17 +64,16 @@ If you want to observe the generated occupancy grid, set `map_recording=True` in
 - Mission footage lives in `media/`.
 - `media/final_run_vid.mp4` – A short clip of the real run covering map generation, landing-pad detection, and the return flight.
 
-**Map generation walkthrough**
+## Mission Demonstrations
 
-<video src="media/map_generation.mp4" controls width="480">
-  Your browser does not support the video tag. <a href="media/map_generation.mp4">Download the clip</a>.
-</video>
+<p align="center">
+  <b>Map generation walkthrough</b><br>
+  <img src="media/map_generation.gif" alt="Map generation walkthrough" width="320"/><br><br>
 
-**Landing-pad acquisition**
+  <b>Landing-pad acquisition</b><br>
+  <img src="media/landing_pad_search.gif" alt="Landing-pad acquisition" width="320"/>
+</p>
 
-<video src="media/landing_pad_search.mp4" controls width="480">
-  Your browser does not support the video tag. <a href="media/landing_pad_search.mp4">Download the clip</a>.
-</video>
 
 ## Extending the Project
 
