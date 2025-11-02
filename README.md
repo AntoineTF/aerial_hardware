@@ -14,8 +14,7 @@ The objective is to autonomously steer a Crazyflie nano‑drone from its take-of
 ```
 hardware_if_research.py  # Main mission script
 mission_utils.py         # Shared utilities (A*, distance helpers, geometry tools)
-final_run_vid.mp4        # Example flight showcasing the full mission
-Aerial_presentation.pptx # Presentation slides prepared for the course
+media/                   # Mission footage (final run, map walkthrough, landing search)
 ```
 
 ## Requirements
@@ -41,7 +40,7 @@ pip install cflib numpy matplotlib
 ## Running the Mission
 
 1. Connect the Crazyradio PA and ensure the Crazyflie is powered with the decks installed.
-2. Adjust the URI in `hardware_if_research.py` if you are not using the default `radio://0/20/2M/E7E7E7E702`.
+2. Adjust the URI in `hardware_if_research.py` if you are not using the default `radio://0/20/2M/E7E7E7E7**`.
 3. (Recommended) Calibrate the Crazyflie sensors and verify the Flow deck height readings in the Crazyflie client.
 4. Launch the mission:
 
@@ -62,9 +61,20 @@ If you want to observe the generated occupancy grid, set `map_recording=True` in
 
 ## Media
 
-- `final_run_vid.mp4` – A short clip of the real run covering map generation, landing-pad detection, and the return flight.
+- Mission footage lives in `media/`.
+- `media/final_run_vid.mp4` – A short clip of the real run covering map generation, landing-pad detection, and the return flight.
 
-You can add additional clips to this section for better visibility when sharing the repository.
+**Map generation walkthrough**
+
+<video src="media/map_generation.mp4" controls width="480">
+  Your browser does not support the video tag. <a href="media/map_generation.mp4">Download the clip</a>.
+</video>
+
+**Landing-pad acquisition**
+
+<video src="media/landing_pad_search.mp4" controls width="480">
+  Your browser does not support the video tag. <a href="media/landing_pad_search.mp4">Download the clip</a>.
+</video>
 
 ## Extending the Project
 
@@ -77,4 +87,3 @@ You can add additional clips to this section for better visibility when sharing 
 
 This work was produced as part of the Aerial Robotics class at EPFL.  
 Many thanks to the course staff and teammates for feedback, testing time, and arena setup support.
-
